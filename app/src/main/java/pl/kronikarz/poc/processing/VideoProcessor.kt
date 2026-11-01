@@ -79,7 +79,6 @@ class VideoProcessor(
         FaceDetectorEngine(relMin).use { detector ->
             FaceEmbedder(context).use { embedder ->
                 var t = 0L
-                var frameIndex = 0
                 var lastHash = 0L
                 while (t < info.durationMs) {
                     coroutineContext.ensureActive()
@@ -92,6 +91,8 @@ class VideoProcessor(
                         // W trybie klatek kluczowych dekoder potrafi zwrócić tę samą klatkę kilka razy.
                         if (hash != lastHash) {
                             lastHash = hash
+                            // numer przetworzonej próbki: kolejne próbki = kolejne liczby (śledzenie w grupowaniu)
+                            val frameIndex = frames
                             frames++
                             tick = SystemClock.elapsedRealtime()
                             val faces = detector.detect(frame)
@@ -140,7 +141,6 @@ class VideoProcessor(
                         }
                         frame.recycle()
                     }
-                    frameIndex++
                     t += settings.sampleIntervalMs
                     onProgress(
                         ProcessingProgress(
