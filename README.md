@@ -12,7 +12,7 @@ Proof of concept aplikacji na Androida, która:
 Wszystko dzieje się na telefonie. Aplikacja **nie ma uprawnienia INTERNET** i prosi tylko o mikrofon.
 
 > **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (`assembleDebug`), 43 testy jednostkowe
-> przechodzi, a algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu testowego (sekcja
+> przechodzą, a algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu testowego (sekcja
 > [Pomiary](#pomiary)). **Aplikacji nie uruchamiałem na telefonie ani emulatorze** — środowisko, w którym
 > powstała, nie ma urządzenia ani akceleracji emulatora. Czas przetwarzania na urządzeniu jest więc
 > do zmierzenia (aplikacja mierzy go sama, patrz [Jak zmierzyć czas](#jak-zmierzyć-czas-na-telefonie)),
