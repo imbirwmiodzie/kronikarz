@@ -76,7 +76,8 @@ Testy jednostkowe (JVM, bez telefonu):
 ## Jak używać
 
 1. **Ekran główny** → „Wybierz nagranie” (systemowy wybór wideo, bez uprawnień do pamięci) albo
-   „Wybierz z plików” (np. nagranie w Pobranych, którego nie ma w galerii).
+   „Wybierz z plików” (np. nagranie w Pobranych, którego nie ma w galerii). Można też w galerii
+   wybrać film → „Udostępnij” → **Kronikarz**.
 2. **Przetwarzanie**: pasek postępu, przejrzany czas nagrania, liczba twarzy, szacowany czas do końca,
    „Anuluj”. Ekran nie gaśnie w trakcie.
 3. **Przegląd osób** (jedna osoba na ekranie, najczęściej widoczne najpierw):

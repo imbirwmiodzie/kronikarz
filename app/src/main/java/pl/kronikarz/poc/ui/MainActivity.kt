@@ -1,11 +1,17 @@
 package pl.kronikarz.poc.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -22,13 +28,24 @@ import pl.kronikarz.poc.ui.theme.AlbumColors
 import pl.kronikarz.poc.ui.theme.KronikarzTheme
 
 class MainActivity : ComponentActivity() {
+    /** Wideo udostępnione z innej aplikacji (ACTION_SEND), czekające na rozpoczęcie przetwarzania. */
+    private val sharedVideo = mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as KronikarzApp
+        if (savedInstanceState == null) handleShare(intent)
         setContent {
             KronikarzTheme {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = AlbumColors.Paper) {
                     val nav = rememberNavController()
+                    val shared by sharedVideo
+                    LaunchedEffect(shared) {
+                        val uri = shared ?: return@LaunchedEffect
+                        sharedVideo.value = null
+                        app.processing.start(uri, app.settings.settings.value)
+                        nav.navigate("processing") { popUpTo("home") }
+                    }
                     NavHost(nav, startDestination = "home") {
                         composable("home") {
                             HomeScreen(
@@ -83,5 +100,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleShare(intent)
+    }
+
+    private fun handleShare(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val uri = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        if (uri != null) sharedVideo.value = uri
     }
 }
