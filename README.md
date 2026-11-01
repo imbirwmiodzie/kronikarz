@@ -11,7 +11,7 @@ Proof of concept aplikacji na Androida, która:
 
 Wszystko dzieje się na telefonie. Aplikacja **nie ma uprawnienia INTERNET** i prosi tylko o mikrofon.
 
-> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (`assembleDebug`), 41 testów jednostkowych
+> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (`assembleDebug`), 43 testy jednostkowe
 > przechodzi, a algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu testowego (sekcja
 > [Pomiary](#pomiary)). **Aplikacji nie uruchamiałem na telefonie ani emulatorze** — środowisko, w którym
 > powstała, nie ma urządzenia ani akceleracji emulatora. Czas przetwarzania na urządzeniu jest więc
@@ -311,7 +311,7 @@ wymienić z powodów licencyjnych.
 
 ## Testy
 
-### Jednostkowe (JVM) — 41 testów, `./gradlew testDebugUnitTest`
+### Jednostkowe (JVM) — 43 testy, `./gradlew testDebugUnitTest`
 
 | Plik | Co sprawdza |
 |---|---|
@@ -322,6 +322,7 @@ wymienić z powodów licencyjnych.
 | `FaceClustererRealEmbeddingsTest` | **zapisane prawdziwe embeddingi** (877 + 693 twarzy, 9 osób): każda osoba ma kartę, **zero kart łączących różne osoby**, limit duplikatów, trafność podpowiedzi scalania, przewaga śledzenia, szybkość |
 | `ShotSelectorTest` | najlepsze ujęcie + alternatywy odległe w czasie |
 | `PersonOpsTest` | scalanie (wystąpienia, ujęcia, nagrania, imię, łańcuchy scaleń), ukrywanie, wybór ujęcia, budowanie osób |
+| `ExportBuilderTest` | nazwy plików w ZIP, numeracja nagrań, osoby ukryte/scalone bez zdjęć, kształt `session.json` (formatVersion 1) |
 | `StaticQuestionProviderTest` | kolejność pytań z prawdziwego `questions.json`, przejście po nagraniu, pomijanie, pytanie zamykające |
 
 ### Test ręczny na telefonie (do wykonania)

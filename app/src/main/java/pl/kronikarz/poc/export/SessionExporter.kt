@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import pl.kronikarz.poc.BuildConfig
+import pl.kronikarz.poc.data.FaceShot
 import pl.kronikarz.poc.data.PersonStatus
 import pl.kronikarz.poc.data.ProcessingSettings
 import pl.kronikarz.poc.data.ProcessingStats
@@ -93,48 +94,8 @@ class SessionExporter(private val context: Context, private val repository: Sess
         val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         val zipFile = File(outDir, "kronikarz_${stamp}.zip")
 
-        val files = mutableListOf<Pair<String, File>>() // ścieżka w ZIP -> plik źródłowy
-        val persons = session.persons.sortedBy { it.number }.map { p ->
-            val tag = "p%02d".format(p.number)
-            val active = p.status == PersonStatus.ACTIVE
-            fun shot(name: String, s: pl.kronikarz.poc.data.FaceShot): ExportShot {
-                val path = "faces/${tag}_$name.jpg"
-                files += path to repository.file(session.id, s.cropPath)
-                return ExportShot(path, s.timestampMs, s.quality)
-            }
-            ExportPerson(
-                id = p.id,
-                number = p.number,
-                name = p.name?.takeIf { it.isNotBlank() },
-                status = p.status.name.lowercase(),
-                mergedInto = p.mergedInto,
-                occurrenceCount = p.occurrenceCount,
-                timestampsMs = p.timestampsMs,
-                bestShot = if (active) shot("best", p.bestShot) else null,
-                alternateShots = if (active) p.alternateShots.mapIndexed { i, s -> shot("alt${i + 1}", s) } else emptyList(),
-                bestShotChosenByUser = p.bestShotChosenByUser,
-                recordingIds = session.recordingsOf(p.id).map { it.id },
-            )
-        }
-        val numberOf = session.persons.associate { it.id to it.number }
-        val counters = HashMap<String, Int>()
-        val recordings = session.recordings.sortedBy { it.createdAt }.map { r ->
-            val tag = "p%02d_%s".format(numberOf[r.personId] ?: 0, r.questionId)
-            val n = (counters[tag] ?: 0) + 1
-            counters[tag] = n
-            val path = "audio/${tag}_$n.m4a"
-            files += path to repository.file(session.id, r.audioPath)
-            ExportRecording(r.id, r.personId, r.questionId, r.questionText, path, r.durationMs, iso(r.createdAt))
-        }
-
-        val manifest = ExportManifest(
-            exportedAt = iso(System.currentTimeMillis()),
-            app = "Kronikarz POC ${BuildConfig.VERSION_NAME}",
-            session = ExportSession(session.id, iso(session.createdAt), session.video, session.settings, session.stats),
-            questions = questions,
-            persons = persons,
-            recordings = recordings,
-        )
+        val (manifest, entries) = ExportBuilder.build(session, questions, System.currentTimeMillis(), "Kronikarz POC ${BuildConfig.VERSION_NAME}")
+        val files = entries.map { (zipPath, relative) -> zipPath to repository.file(session.id, relative) }
 
         ZipOutputStream(zipFile.outputStream().buffered()).use { zip ->
             zip.putNextEntry(ZipEntry("session.json"))
@@ -166,6 +127,58 @@ class SessionExporter(private val context: Context, private val repository: Sess
             ?: error("Nie można zapisać pliku")
     }
 
-    private fun iso(ms: Long): String =
+}
+
+/** Budowa manifestu eksportu — czysta funkcja (testowana na JVM). */
+object ExportBuilder {
+    /**
+     * @return manifest oraz lista plików do ZIP-a: (ścieżka w ZIP, ścieżka względna w katalogu sesji).
+     */
+    fun build(session: Session, questions: List<Question>, nowMs: Long, appName: String): Pair<ExportManifest, List<Pair<String, String>>> {
+        val files = mutableListOf<Pair<String, String>>()
+        val persons = session.persons.sortedBy { it.number }.map { p ->
+            val tag = "p%02d".format(p.number)
+            val active = p.status == PersonStatus.ACTIVE
+            fun shot(name: String, s: FaceShot): ExportShot {
+                val path = "faces/${tag}_$name.jpg"
+                files += path to s.cropPath
+                return ExportShot(path, s.timestampMs, s.quality)
+            }
+            ExportPerson(
+                id = p.id,
+                number = p.number,
+                name = p.name?.takeIf { it.isNotBlank() },
+                status = p.status.name.lowercase(),
+                mergedInto = p.mergedInto,
+                occurrenceCount = p.occurrenceCount,
+                timestampsMs = p.timestampsMs,
+                bestShot = if (active) shot("best", p.bestShot) else null,
+                alternateShots = if (active) p.alternateShots.mapIndexed { i, s -> shot("alt${i + 1}", s) } else emptyList(),
+                bestShotChosenByUser = p.bestShotChosenByUser,
+                recordingIds = session.recordingsOf(p.id).map { it.id },
+            )
+        }
+        val numberOf = session.persons.associate { it.id to it.number }
+        val counters = HashMap<String, Int>()
+        val recordings = session.recordings.sortedBy { it.createdAt }.map { r ->
+            val tag = "p%02d_%s".format(numberOf[r.personId] ?: 0, r.questionId)
+            val n = (counters[tag] ?: 0) + 1
+            counters[tag] = n
+            val path = "audio/${tag}_$n.m4a"
+            files += path to r.audioPath
+            ExportRecording(r.id, r.personId, r.questionId, r.questionText, path, r.durationMs, iso(r.createdAt))
+        }
+        val manifest = ExportManifest(
+            exportedAt = iso(nowMs),
+            app = appName,
+            session = ExportSession(session.id, iso(session.createdAt), session.video, session.settings, session.stats),
+            questions = questions,
+            persons = persons,
+            recordings = recordings,
+        )
+        return manifest to files
+    }
+
+    fun iso(ms: Long): String =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
 }
