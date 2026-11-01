@@ -205,9 +205,10 @@ class VideoProcessor(
     }
 
     private fun grayRegion(frame: Bitmap, box: Rect): GrayImage {
-        val r = Rect(box).apply { intersect(0, 0, frame.width, frame.height) }
-        val w = max(1, r.width())
-        val h = max(1, r.height())
+        val r = Rect(box)
+        if (!r.intersect(0, 0, frame.width, frame.height) || r.isEmpty) r.set(0, 0, 1, 1)
+        val w = r.width()
+        val h = r.height()
         val px = IntArray(w * h)
         frame.getPixels(px, 0, w, r.left, r.top, w, h)
         return GrayImage.fromArgb(w, h, px)
@@ -220,18 +221,19 @@ class VideoProcessor(
         // Lekko w dół: pod twarzą zostaje kawałek szyi/ubrania, jak na zdjęciu portretowym.
         val cy = box.centerY() + (box.height() * 0.05f).roundToInt()
         val r = Rect(cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2)
-        r.intersect(0, 0, frame.width, frame.height)
-        if (r.width() <= 0 || r.height() <= 0) return
+        if (!r.intersect(0, 0, frame.width, frame.height) || r.isEmpty) return
+        // Uwaga: gdy wycinek obejmuje całą klatkę (zbliżenie), createBitmap zwraca TĘ SAMĄ bitmapę —
+        // nie wolno jej wtedy zwolnić, bo klatka jest jeszcze potrzebna dla kolejnych twarzy.
         var crop = Bitmap.createBitmap(frame, r.left, r.top, r.width(), r.height())
         val longest = max(crop.width, crop.height)
         if (longest > CROP_MAX_PX) {
             val s = CROP_MAX_PX.toFloat() / longest
             val scaled = Bitmap.createScaledBitmap(crop, (crop.width * s).roundToInt(), (crop.height * s).roundToInt(), true)
-            if (scaled !== crop) crop.recycle()
+            if (scaled !== crop && crop !== frame) crop.recycle()
             crop = scaled
         }
         FileOutputStream(out).use { crop.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        crop.recycle()
+        if (crop !== frame) crop.recycle()
     }
 
     /** Tani skrót klatki (siatka 8×8 pikseli) do wykrywania powtórzonych klatek. */

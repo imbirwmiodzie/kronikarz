@@ -96,7 +96,7 @@ class ProcessingManager(
 
     /** Wynik obejrzany — wracamy do stanu spoczynku. */
     fun acknowledge() {
-        if (job?.isActive != true) _state.value = ProcessingState.Idle
+        if (_state.value !is ProcessingState.Running) _state.value = ProcessingState.Idle
     }
 
     /**

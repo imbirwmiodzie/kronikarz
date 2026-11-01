@@ -52,15 +52,26 @@ class CodecFrameSource(
 
     override fun frameAt(timeMs: Long): Bitmap? {
         val targetUs = timeMs * 1000
+        var idle = 0
         while (!outputDone) {
             feedInput()
             val index = codec.dequeueOutputBuffer(bufferInfo, 10_000)
-            if (index < 0) continue // brak klatki / zmiana formatu — próbujemy dalej
+            if (index < 0) {
+                // brak klatki / zmiana formatu — próbujemy dalej, ale nie w nieskończoność
+                if (++idle > MAX_IDLE_POLLS) error("Dekoder nie zwraca klatek")
+                continue
+            }
+            idle = 0
             val eos = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
             val pts = bufferInfo.presentationTimeUs
             var result: Bitmap? = null
             if (bufferInfo.size > 0 && pts >= targetUs) {
-                result = codec.getOutputImage(index)?.use { toBitmap(it) }
+                val image = codec.getOutputImage(index)
+                if (image == null) {
+                    codec.releaseOutputBuffer(index, false)
+                    error("Dekoder nie udostępnia obrazu YUV") // -> FallbackFrameSource
+                }
+                result = image.use { toBitmap(it) }
             }
             codec.releaseOutputBuffer(index, false)
             if (eos) outputDone = true
@@ -132,6 +143,11 @@ class CodecFrameSource(
             bmp = scaled
         }
         return bmp
+    }
+
+    private companion object {
+        /** 500 × 10 ms bez żadnej klatki = dekoder się zaciął. */
+        const val MAX_IDLE_POLLS = 500
     }
 
     override fun close() {

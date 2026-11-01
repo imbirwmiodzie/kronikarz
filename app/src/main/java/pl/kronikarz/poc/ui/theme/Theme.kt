@@ -14,11 +14,11 @@ import androidx.compose.ui.unit.sp
 object AlbumColors {
     val Paper = Color(0xFFF4ECDF)        // tło: kremowy papier
     val PaperDark = Color(0xFFE8DBC6)    // karty/sekcje
-    val Ink = Color(0xFF2B1D14)          // tekst: prawie czarny brąz (kontrast > 12:1 na Paper)
-    val InkSoft = Color(0xFF4F3B2C)      // tekst pomocniczy (kontrast > 7:1)
-    val Terracotta = Color(0xFFA8502C)   // główne akcje
-    val TerracottaDark = Color(0xFF7E3A1E)
-    val Recording = Color(0xFFB3261E)    // nagrywanie w toku
+    val Ink = Color(0xFF2B1D14)          // tekst: prawie czarny brąz (13.9:1 na Paper)
+    val InkSoft = Color(0xFF4F3B2C)      // tekst pomocniczy (9.0:1 na Paper, 7.7:1 na PaperDark)
+    val Terracotta = Color(0xFF8F3F22)   // główne akcje (biały tekst: 7.2:1)
+    val TerracottaDark = Color(0xFF6E3019)
+    val Recording = Color(0xFF9E1F18)    // nagrywanie w toku (biały: 7.9:1)
     val Moss = Color(0xFF4E6B3A)         // potwierdzenia
     val PhotoBorder = Color(0xFFFFFFFF)
 }

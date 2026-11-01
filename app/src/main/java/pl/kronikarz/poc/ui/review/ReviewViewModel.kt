@@ -1,6 +1,7 @@
 package pl.kronikarz.poc.ui.review
 
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -139,6 +140,7 @@ class ReviewViewModel(
             voice.start(file)
         } catch (e: Exception) {
             Log.e(TAG, "Nie udało się rozpocząć nagrywania", e)
+            Toast.makeText(app, "Nie udało się włączyć mikrofonu", Toast.LENGTH_LONG).show()
             return
         }
         app.player.stop()
@@ -163,7 +165,10 @@ class ReviewViewModel(
         recordingFor = null
         pendingFile = null
         _recorder.value = RecorderUi()
-        if (duration == null) return
+        if (duration == null) {
+            Toast.makeText(app, "Nagranie było za krótkie — spróbuj jeszcze raz", Toast.LENGTH_SHORT).show()
+            return
+        }
         val rec = Recording(
             id = UUID.randomUUID().toString(),
             personId = target.first,

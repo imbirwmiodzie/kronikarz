@@ -136,8 +136,23 @@ fun ReviewScreen(
         },
     ) { padding ->
         if (u == null) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Brak osób do przejrzenia", style = MaterialTheme.typography.headlineSmall)
+            // null = jeszcze się ładuje albo sesja nie ma osób; komunikat tylko w drugim przypadku
+            val session = app.repository.sessions.collectAsState().value[sessionId]
+            if (session != null && session.activePersons.isEmpty()) {
+                Column(
+                    Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("Nie znaleziono osób na tym nagraniu", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Twarze mogą być za małe albo zbyt rzadko widoczne. Możesz spróbować innego nagrania.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AlbumColors.InkSoft,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
             return@Scaffold
         }

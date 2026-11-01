@@ -1,6 +1,7 @@
 package pl.kronikarz.poc.audio
 
 import android.media.MediaPlayer
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,7 @@ class AudioPlayer {
             player = p
             _playingId.value = id
         } catch (e: Exception) {
+            Log.e("AudioPlayer", "Nie można odtworzyć ${file.name}", e)
             p.release()
         }
     }
