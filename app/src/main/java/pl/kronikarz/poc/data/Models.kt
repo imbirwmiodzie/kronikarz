@@ -21,6 +21,12 @@ data class ProcessingSettings(
      * Dużo szybszy dla nagrań z rzadkimi klatkami kluczowymi; przy błędzie wraca do retrievera.
      */
     val sequentialDecoder: Boolean = false,
+    /**
+     * Doszukiwanie ostrzejszych ujęć: wokół każdego wybranego ujęcia (najlepsze + alternatywy)
+     * sprawdzamy sąsiednie klatki w oknie ±[refineWindowMs] i bierzemy najostrzejszą.
+     * 0 = wyłączone. Koszt: ok. (2·okno/czas klatki) dekodowań na ujęcie.
+     */
+    val refineWindowMs: Int = 160,
     /** Większe klatki są zmniejszane do tej szerokości przed detekcją (HD z telefonu). */
     val maxFrameWidth: Int = 1280,
     /** Zachowaj wszystkie wycinki i embeddingi (podgląd grup i ponowne grupowanie w debug). */
@@ -34,6 +40,8 @@ data class VideoInfo(
     val durationMs: Long,
     val width: Int,
     val height: Int,
+    /** Klatki na sekundę (0 = nieznane). */
+    val frameRate: Float = 0f,
 )
 
 @Serializable
@@ -59,6 +67,10 @@ data class ProcessingStats(
     val framesFailed: Int = 0,
     /** Próbki pominięte, bo dekoder zwrócił tę samą klatkę co poprzednio. */
     val framesDuplicate: Int = 0,
+    /** Doszukiwanie ostrzejszych ujęć: czas, liczba sprawdzonych ujęć i ile z nich udało się poprawić. */
+    val refineMs: Long = 0,
+    val refineShots: Int = 0,
+    val refineImproved: Int = 0,
 ) {
     /** Czas przetwarzania jednej minuty wideo (główna metryka wydajności). */
     val msPerVideoMinute: Long get() = if (videoDurationMs <= 0) 0 else wallClockMs * 60_000 / videoDurationMs

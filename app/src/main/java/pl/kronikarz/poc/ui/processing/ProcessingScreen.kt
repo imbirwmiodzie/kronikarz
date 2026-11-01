@@ -121,6 +121,7 @@ private fun Running(s: ProcessingState.Running, onCancel: () -> Unit) {
             when (p.phase) {
                 ProcessingProgress.Phase.FRAMES -> "Przejrzano ${formatDuration(p.processedMs)} z ${formatDuration(p.durationMs)}"
                 ProcessingProgress.Phase.GROUPING -> "Grupuję twarze w osoby…"
+                ProcessingProgress.Phase.REFINING -> "Szukam najostrzejszych zdjęć: ${p.refineDone} z ${p.refineTotal}"
                 ProcessingProgress.Phase.SAVING -> "Zapisuję…"
             },
             style = MaterialTheme.typography.bodyLarge,

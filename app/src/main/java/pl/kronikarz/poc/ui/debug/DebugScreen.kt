@@ -89,6 +89,10 @@ fun DebugScreen(app: KronikarzApp, onBack: () -> Unit) {
                 format = { "${it.roundToInt()}" }) { v ->
                 app.settings.update { it.copy(minOccurrences = v.roundToInt()) }
             }
+            SliderRow("Szukanie ostrzejszej klatki (±ms, 0 = wył.)", settings.refineWindowMs.toFloat(), 0f..400f, steps = 9,
+                format = { if (it < 1f) "wyłączone" else "±${it.roundToInt()} ms" }) { v ->
+                app.settings.update { it.copy(refineWindowMs = (v / 40).roundToInt() * 40) }
+            }
             SliderRow("Maks. szerokość klatki (px)", settings.maxFrameWidth.toFloat(), 480f..1920f, steps = 8,
                 format = { "${it.roundToInt()} px" }) { v ->
                 app.settings.update { it.copy(maxFrameWidth = (v / 160).roundToInt() * 160) }
@@ -210,6 +214,7 @@ private fun StatsBlock(s: Session) {
         appendLine("Czas: ${formatDuration(st.wallClockMs)}  →  ${"%.1f".format(st.msPerVideoMinute / 1000f)} s na minutę wideo")
         appendLine("  dekodowanie ${st.decodeMs / 1000}s, detekcja ${st.detectMs / 1000}s, embedding ${st.embedMs / 1000}s, reszta ${st.otherMs / 1000}s, grupowanie ${st.clusterMs}ms")
         appendLine("Klatki: ${st.framesSampled} (nieudane ${st.framesFailed}, powtórzone ${st.framesDuplicate}), twarze wykryte: ${st.facesDetected}, przyjęte: ${st.facesAccepted}")
+        appendLine("Doszukiwanie ostrzejszych ujęć: ${st.refineImproved} z ${st.refineShots} poprawionych, ${st.refineMs / 1000}s")
         appendLine("Odrzucone: za małe ${st.rejectedTooSmall}, ucięte ${st.rejectedAtEdge}, bez punktów ${st.rejectedNoLandmarks}")
         appendLine("Dekoder: ${if (s.settings.sequentialDecoder) "MediaCodec (sekwencyjny)" else "MediaMetadataRetriever"}${if (s.settings.exactFrames) "" else ", klatki kluczowe"}")
         appendLine("Ustawienia sesji: co ${s.settings.sampleIntervalMs} ms, min ${s.settings.minFaceHeightPx} px, próg ${s.settings.similarityThreshold}, min wyst. ${s.settings.minOccurrences}")

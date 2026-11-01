@@ -35,10 +35,11 @@ data class QualityBreakdown(
 )
 
 data class QualityWeights(
-    val size: Float = 0.20f,
-    val sharpness: Float = 0.25f,
-    val frontal: Float = 0.20f,
-    val eyes: Float = 0.15f,
+    // Ostrość waży najwięcej: na VHS to ona decyduje, czy zdjęcie da się oglądać.
+    val size: Float = 0.16f,
+    val sharpness: Float = 0.33f,
+    val frontal: Float = 0.18f,
+    val eyes: Float = 0.13f,
     val exposure: Float = 0.15f,
     val smileBonus: Float = 0.05f,
     /** Jaką część wyniku zabiera maksymalny przeplot. */

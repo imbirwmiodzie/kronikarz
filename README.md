@@ -11,8 +11,8 @@ Proof of concept aplikacji na Androida, która:
 
 Wszystko dzieje się na telefonie. Aplikacja **nie ma uprawnienia INTERNET** i prosi tylko o mikrofon.
 
-> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (lokalnie i w CI), 43 testy jednostkowe
-> przechodzą, Android Lint: 0 błędów. Algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu
+> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (lokalnie i w CI), 47 testów jednostkowych
+> przechodzi, Android Lint: 0 błędów. Algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu
 > testowego (sekcja [Pomiary](#pomiary)). **Aplikację przeszedłem od początku do końca na emulatorze**
 > (Android 10, x86_64, bez akceleracji sprzętowej): wybór pliku → postęp → anulowanie (sesja usunięta) →
 > ponowne przetworzenie 10-sekundowego fragmentu filmu → 2 osoby rozdzielone poprawnie → przegląd
@@ -166,6 +166,55 @@ pominięte pytania, sesja). Implementacja AI to nowa klasa. Ekranu nie trzeba zm
 
 ## Przetwarzanie wideo
 
+### Schemat przetwarzania
+
+Źródło: [`docs/przetwarzanie.mmd`](docs/przetwarzanie.mmd), obrazek: [`docs/przetwarzanie.png`](docs/przetwarzanie.png).
+
+```mermaid
+flowchart TD
+    A([Wybór wideo<br/>galeria · pliki · „Udostępnij”]) --> B[Otwarcie nagrania<br/>długość, rozdzielczość, klatki/s]
+    B --> K1
+
+    subgraph S1["① PRZEGLĄD NAGRANIA — powtarzane co 0,5 s · pasek 0–80%"]
+        direction TB
+        K1[Dekodowanie klatki<br/>MediaMetadataRetriever lub MediaCodec<br/>powtórzona klatka → pomijana] --> K2[ML Kit: wykrycie twarzy<br/>prostokąt · oczy, nos, usta · kąty głowy<br/>oczy otwarte? uśmiech?]
+        K2 --> K3{Filtry<br/>wysokość ≥ 40 px<br/>cała w kadrze<br/>widać oba oczy}
+        K3 -- „nie” → odrzucona --> K9[licznik w statystyce]
+        K3 -- „tak” --> K4[Wyrównanie twarzy do 112×112<br/>według oczu, nosa i ust]
+        K4 --> K5[SFace: embedding<br/>128 liczb — „odcisk twarzy”]
+        K5 --> K6[Ocena ujęcia 0–1<br/>ostrość 33% · na wprost 18% · wielkość 16%<br/>jasność 15% · oczy 13% · uśmiech 5%<br/>× kara za grzebienie przeplotu]
+        K6 --> K7[Wycinek z marginesem 40%<br/>przy przeplocie: jedno pole]
+        K7 --> K8[(Twarz zapisana<br/>czas · miejsce · embedding · ocena · wycinek)]
+    end
+
+    K8 -- po ostatniej klatce --> G1
+
+    subgraph S2["② GRUPOWANIE W OSOBY — ułamek sekundy"]
+        direction TB
+        G1[Śledzenie<br/>ta sama twarz w kolejnych próbkach:<br/>to samo miejsce + podobny embedding] --> G2[Grupowanie wstępne<br/>wysoki próg podobieństwa]
+        G2 --> G3[Łączenie grup<br/>średnie podobieństwo > 0,40<br/>dwie twarze z jednej klatki = dwie osoby]
+        G3 --> G4{co najmniej<br/>3 wystąpienia?}
+        G4 -- „nie” --> G9[szum / przypadkowe twarze<br/>widoczne w debug]
+        G4 -- „tak” --> G5[Osoba<br/>najlepsze ujęcie + do 3 alternatyw<br/>z innych momentów, ≥ 3 s od siebie]
+    end
+
+    G5 --> R1
+
+    subgraph S3["③ SZUKANIE NAJOSTRZEJSZEJ KLATKI — każde ujęcie każdej osoby · pasek 80–100%"]
+        direction TB
+        R1[Każda klatka w oknie ±160 ms<br/>wokół wybranego ujęcia] --> R2{Ta sama twarz?<br/>to samo miejsce kadru<br/>+ podobny embedding}
+        R2 -- „tak” --> R3{Ocena wyższa<br/>niż dotychczas?}
+        R3 -- „tak” --> R4[Podmiana ujęcia<br/>nowy wycinek]
+    end
+
+    R4 --> Z[(Sesja w telefonie<br/>session.json + wycinki)]
+    R3 -- „nie” --> Z
+    R2 -- „nie” --> Z
+    Z --> E([Przegląd osób → nagrania głosu → eksport ZIP])
+```
+
+### Kroki
+
 1. **Próbkowanie** co `sampleIntervalMs` (domyślnie 500 ms = 2 klatki/s) przez `MediaMetadataRetriever`
    (`OPTION_CLOSEST`). Klatki szersze niż 1280 px są zmniejszane. Identyczne kolejne klatki są pomijane.
 2. **Detekcja**: ML Kit, tryb dokładny, punkty twarzy, klasyfikacja (oczy, uśmiech), kąty głowy.
@@ -177,10 +226,10 @@ pominięte pytania, sesja). Implementacja AI to nowa klasa. Ekranu nie trzeba zm
 
    | Składnik | Waga | Jak liczony |
    |---|---|---|
-   | ostrość | 0.25 | wariancja Laplasjanu na **jednym polu** (co druga linia), na wycinku znormalizowanym do 128 px; s/(s+120) |
-   | wielkość twarzy | 0.20 | wysokość / 160 px |
-   | twarz na wprost | 0.20 | 1 − √(yaw² + (1.2·pitch)² + 0.3·roll²) / 45° |
-   | otwarte oczy | 0.15 | 0.6·min(L, P) + 0.4·średnia (mrugnięcie jednym okiem też karane) |
+   | ostrość | 0.33 | wariancja Laplasjanu na **jednym polu** (co druga linia), na wycinku znormalizowanym do 128 px; s/(s+120) |
+   | wielkość twarzy | 0.16 | wysokość / 160 px |
+   | twarz na wprost | 0.18 | 1 − √(yaw² + (1.2·pitch)² + 0.3·roll²) / 45° |
+   | otwarte oczy | 0.13 | 0.6·min(L, P) + 0.4·średnia (mrugnięcie jednym okiem też karane) |
    | jasność i kontrast | 0.15 | średnia blisko 128, odchylenie ≥ 45 |
    | uśmiech | 0.05 | lekki bonus |
    | **przeplot** | kara do −50% | miara „grzebieni” (niżej) |
@@ -198,6 +247,31 @@ pominięte pytania, sesja). Implementacja AI to nowa klasa. Ekranu nie trzeba zm
 6. **Najlepsze ujęcie** = najwyższa ocena. **Alternatywy** (do 3) to kolejne najlepsze ujęcia odległe
    o ≥ 3 s od już wybranych, czyli z innych momentów. Zapisywane są też liczba wystąpień, wszystkie znaczniki
    czasu i średni embedding osoby (do podpowiedzi scalania).
+7. **Szukanie najostrzejszej klatki.** Próbka co 0,5 s często trafia w moment ruchu (rozmazanie,
+   grzebienie przeplotu), a klatka obok jest ostra. Dlatego dla każdego wybranego ujęcia (najlepsze
+   + alternatywy) aplikacja dekoduje **każdą klatkę** w oknie ±160 ms (`refineWindowMs`), znajduje tę
+   samą twarz (to samo miejsce kadru, IoU ≥ 0.3, embedding podobny ≥ 0.35, bo w oknie bywa cięcie
+   montażowe) i bierze klatkę z najwyższą oceną. Koszt: ok. 8 dekodowań i detekcji na ujęcie, czyli
+   ~1/4 czasu przeglądu nagrania. W statystyce w debug widać, ile ujęć udało się poprawić.
+8. **Wycinki z przeplotem** (ocena przeplotu > 0.15) są zapisywane z **jednego pola** (drugie
+   interpolowane): połowa rozdzielczości pionowej, ale bez poszarpanych krawędzi.
+9. **Wyświetlanie.** Wycinki z VHS mają 60–150 px, a na ekranie zajmują ~1000 px. Zamiast
+   dwuliniowego powiększania systemowego aplikacja robi lekkie wyostrzenie i powiększenie
+   dwusześcienne (maks. 4×). Pliki (i eksport) zostają nietknięte, w oryginalnej rozdzielczości.
+
+![Przed i po: wycinki z symulacji VHS](docs/ostrosc_przed_po.png)
+
+*Wycinki twarzy z symulacji VHS filmu „Tears of Steel” (CC BY 3.0, Blender Foundation). Po lewej:
+dotychczasowe wyświetlanie. Po prawej: jedno pole + wyostrzenie + powiększenie dwusześcienne
+(ten sam kod Kotlina co w aplikacji). Szczegółów nie przybywa (to wciąż VHS), ale znikają grzebienie
+i schodki.*
+
+> **Dlaczego na telewizorze wygląda lepiej niż stopklatka?** VHS ma ok. 250–330 linii rozdzielczości
+> poziomej. Twarz w domowym nagraniu to często 60–120 pikseli. W ruchu oko uśrednia kolejne klatki,
+> telewizor sam usuwa przeplot i wyostrza, a ogląda się go z daleka. Pojedyncza klatka powiększona na
+> cały ekran telefonu pokazuje surową rozdzielczość taśmy. Wybór najostrzejszej klatki i powyższe
+> poprawki wyciskają z nagrania maksimum. Żeby **dodać** szczegóły, potrzebny jest model super-rozdzielczości
+> (np. na backendzie) — to kolejny etap.
 
 ### Specyfika VHS
 
@@ -221,6 +295,7 @@ pominięte pytania, sesja). Implementacja AI to nowa klasa. Ekranu nie trzeba zm
 | Min. wysokość twarzy | 40 px | 16–160 px | Niżej = więcej małych twarzy z tła (więcej szumu, gorsze embeddingi) |
 | Próg podobieństwa | 0.40 | 0.15–0.80 | Niżej = mniej duplikatów, ale ryzyko połączenia różnych osób. Wyżej = odwrotnie |
 | Min. liczba wystąpień | 3 | 1–10 | Grupy poniżej progu są odrzucane jako szum |
+| Szukanie ostrzejszej klatki | ±160 ms | 0–400 ms | Okno wokół wybranych ujęć, w którym sprawdzana jest każda klatka. 0 = wyłączone (szybciej) |
 | Maks. szerokość klatki | 1280 px | 480–1920 | Dotyczy nagrań HD z telefonu. VHS (720 px) bez zmian |
 | Dokładne klatki | wł. | | Wył. = tylko klatki kluczowe (szybko, ale mniej klatek i nierówno) |
 | Dekoder sekwencyjny MediaCodec | wył. | | Patrz wyżej (długi GOP) |
@@ -337,11 +412,12 @@ wymienić z powodów licencyjnych.
 
 ## Testy
 
-### Jednostkowe (JVM) — 43 testy, `./gradlew testDebugUnitTest`
+### Jednostkowe (JVM) — 47 testów, `./gradlew testDebugUnitTest`
 
 | Plik | Co sprawdza |
 |---|---|
 | `ImageMetricsTest` | Laplasjan spada przy rozmyciu; wykrywanie przeplotu; ostrość z jednego pola nie jest zawyżana przez grzebienie; ekspozycja; skalowanie |
+| `ImageOpsTest` | usuwanie przeplotu (grzebienie znikają, wybrane pole bez zmian), skalowanie dwusześcienne (rozmiar, kolor, gradient bez „dzwonienia”), wyostrzanie |
 | `QualityScorerTest` | ostra > rozmyta; na wprost > profil / głowa w dół; otwarte oczy > mrugnięcie (też jednym okiem); duża > mała; poprawna > nie-/prześwietlona; uśmiech to tylko mały bonus; kara za przeplot |
 | `FaceAlignmentTest` | odtworzenie znanego przekształcenia; kolejność lewe/prawe oko bez znaczenia; brak punktów |
 | `FaceClustererSyntheticTest` | 5 osób + szum; zakaz łączenia twarzy z tej samej klatki; wpływ progu |

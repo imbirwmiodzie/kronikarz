@@ -37,7 +37,21 @@ class RetrieverFrameSource(
         val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
         val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         val (rw, rh) = if (rotation == 90 || rotation == 270) h to w else w to h
-        info = VideoInfo(uri.toString(), displayName(context, uri), duration, rw, rh)
+        val fps = frameRate(duration)
+        info = VideoInfo(uri.toString(), displayName(context, uri), duration, rw, rh, fps)
+    }
+
+    private fun frameRate(durationMs: Long): Float {
+        val fromCapture = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()
+        if (fromCapture != null && fromCapture in 5f..240f) return fromCapture
+        if (Build.VERSION.SDK_INT >= 28 && durationMs > 0) {
+            val count = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toLongOrNull()
+            if (count != null && count > 0) {
+                val fps = count * 1000f / durationMs
+                if (fps in 5f..240f) return fps
+            }
+        }
+        return 0f
     }
 
     override fun frameAt(timeMs: Long): Bitmap? {

@@ -1,0 +1,40 @@
+flowchart TD
+    A([Wybór wideo<br/>galeria · pliki · „Udostępnij”]) --> B[Otwarcie nagrania<br/>długość, rozdzielczość, klatki/s]
+    B --> K1
+
+    subgraph S1["① PRZEGLĄD NAGRANIA — powtarzane co 0,5 s · pasek 0–80%"]
+        direction TB
+        K1[Dekodowanie klatki<br/>MediaMetadataRetriever lub MediaCodec<br/>powtórzona klatka → pomijana] --> K2[ML Kit: wykrycie twarzy<br/>prostokąt · oczy, nos, usta · kąty głowy<br/>oczy otwarte? uśmiech?]
+        K2 --> K3{Filtry<br/>wysokość ≥ 40 px<br/>cała w kadrze<br/>widać oba oczy}
+        K3 -- „nie” → odrzucona --> K9[licznik w statystyce]
+        K3 -- „tak” --> K4[Wyrównanie twarzy do 112×112<br/>według oczu, nosa i ust]
+        K4 --> K5[SFace: embedding<br/>128 liczb — „odcisk twarzy”]
+        K5 --> K6[Ocena ujęcia 0–1<br/>ostrość 33% · na wprost 18% · wielkość 16%<br/>jasność 15% · oczy 13% · uśmiech 5%<br/>× kara za grzebienie przeplotu]
+        K6 --> K7[Wycinek z marginesem 40%<br/>przy przeplocie: jedno pole]
+        K7 --> K8[(Twarz zapisana<br/>czas · miejsce · embedding · ocena · wycinek)]
+    end
+
+    K8 -- po ostatniej klatce --> G1
+
+    subgraph S2["② GRUPOWANIE W OSOBY — ułamek sekundy"]
+        direction TB
+        G1[Śledzenie<br/>ta sama twarz w kolejnych próbkach:<br/>to samo miejsce + podobny embedding] --> G2[Grupowanie wstępne<br/>wysoki próg podobieństwa]
+        G2 --> G3[Łączenie grup<br/>średnie podobieństwo > 0,40<br/>dwie twarze z jednej klatki = dwie osoby]
+        G3 --> G4{co najmniej<br/>3 wystąpienia?}
+        G4 -- „nie” --> G9[szum / przypadkowe twarze<br/>widoczne w debug]
+        G4 -- „tak” --> G5[Osoba<br/>najlepsze ujęcie + do 3 alternatyw<br/>z innych momentów, ≥ 3 s od siebie]
+    end
+
+    G5 --> R1
+
+    subgraph S3["③ SZUKANIE NAJOSTRZEJSZEJ KLATKI — każde ujęcie każdej osoby · pasek 80–100%"]
+        direction TB
+        R1[Każda klatka w oknie ±160 ms<br/>wokół wybranego ujęcia] --> R2{Ta sama twarz?<br/>to samo miejsce kadru<br/>+ podobny embedding}
+        R2 -- „tak” --> R3{Ocena wyższa<br/>niż dotychczas?}
+        R3 -- „tak” --> R4[Podmiana ujęcia<br/>nowy wycinek]
+    end
+
+    R4 --> Z[(Sesja w telefonie<br/>session.json + wycinki)]
+    R3 -- „nie” --> Z
+    R2 -- „nie” --> Z
+    Z --> E([Przegląd osób → nagrania głosu → eksport ZIP])

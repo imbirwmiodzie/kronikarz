@@ -3,6 +3,8 @@ package pl.kronikarz.poc.processing
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.net.Uri
+import android.util.Log
 import android.os.Build
 import android.os.SystemClock
 import kotlinx.coroutines.ensureActive
@@ -10,7 +12,12 @@ import pl.kronikarz.poc.analysis.FaceAlignment
 import pl.kronikarz.poc.analysis.FaceObservation
 import pl.kronikarz.poc.analysis.GrayImage
 import pl.kronikarz.poc.analysis.QualityScorer
+import pl.kronikarz.poc.analysis.ImageOps
+import pl.kronikarz.poc.analysis.VectorMath
 import pl.kronikarz.poc.data.FaceRecord
+import pl.kronikarz.poc.data.FaceShot
+import pl.kronikarz.poc.data.Person
+import pl.kronikarz.poc.data.VideoInfo
 import pl.kronikarz.poc.data.PersonOps
 import pl.kronikarz.poc.data.ProcessingSettings
 import pl.kronikarz.poc.data.ProcessingStats
@@ -31,17 +38,37 @@ data class ProcessingProgress(
     val facesFound: Int,
     val elapsedMs: Long,
     val phase: Phase,
+    /** Etap doszukiwania ostrzejszych ujęć: ile ujęć sprawdzono / ile w sumie. */
+    val refineDone: Int = 0,
+    val refineTotal: Int = 0,
+    /** Czy po klatkach będzie etap doszukiwania (wtedy klatki to 0–80% paska). */
+    val refineEnabled: Boolean = false,
 ) {
-    enum class Phase { FRAMES, GROUPING, SAVING }
+    enum class Phase { FRAMES, GROUPING, REFINING, SAVING }
 
-    val fraction: Float get() = if (durationMs <= 0) 0f else (processedMs.toFloat() / durationMs).coerceIn(0f, 1f)
+    val fraction: Float
+        get() {
+            val frames = if (durationMs <= 0) 0f else (processedMs.toFloat() / durationMs).coerceIn(0f, 1f)
+            if (!refineEnabled) return frames
+            return when (phase) {
+                Phase.FRAMES -> FRAMES_SHARE * frames
+                Phase.GROUPING -> FRAMES_SHARE
+                Phase.REFINING -> FRAMES_SHARE + (1 - FRAMES_SHARE) * (if (refineTotal == 0) 1f else refineDone.toFloat() / refineTotal)
+                Phase.SAVING -> 1f
+            }
+        }
+
+    private companion object {
+        const val FRAMES_SHARE = 0.8f
+    }
 
     /** Szacowany pozostały czas na podstawie dotychczasowego tempa. */
     val etaMs: Long? get() = if (fraction < 0.03f) null else (elapsedMs / fraction - elapsedMs).toLong()
 }
 
 /**
- * Cały potok: klatki -> twarze -> filtry -> embedding + ocena jakości -> wycinki -> grupowanie -> osoby.
+ * Cały potok: klatki -> twarze -> filtry -> embedding + ocena jakości -> wycinki -> grupowanie -> osoby
+ * -> doszukanie ostrzejszych ujęć w sąsiednich klatkach. Schemat: README, „Schemat przetwarzania”.
  */
 class VideoProcessor(
     private val context: Context,
@@ -77,6 +104,11 @@ class VideoProcessor(
         // poniżej progu w pikselach, żeby to nasz filtr decydował, a detektor nie gubił twarzy.
         val frameW = min(info.width.takeIf { it > 0 } ?: settings.maxFrameWidth, settings.maxFrameWidth)
         val relMin = (settings.minFaceHeightPx * 0.8f / frameW).coerceIn(0.02f, 0.5f)
+
+        val refineOn = settings.refineWindowMs > 0
+        var built: PersonOps.BuildResult? = null
+        var clusterMs = 0L
+        var refine = RefineResult(emptyList(), 0, 0, 0)
 
         FaceDetectorEngine(relMin).use { detector ->
             FaceEmbedder(context).use { embedder ->
@@ -129,7 +161,7 @@ class VideoProcessor(
                                     )
                                 )
                                 val cropName = "f_$id.jpg"
-                                saveCrop(frame, f.box, File(facesDir, cropName))
+                                saveCrop(frame, f.box, File(facesDir, cropName), deinterlace = quality.combing > DEINTERLACE_ABOVE)
                                 records += FaceRecord(
                                     id = id, frameIndex = frameIndex, timestampMs = t,
                                     left = f.box.left, top = f.box.top, right = f.box.right, bottom = f.box.bottom,
@@ -154,30 +186,44 @@ class VideoProcessor(
                             framesProcessed = frames, facesFound = records.size,
                             elapsedMs = SystemClock.elapsedRealtime() - start,
                             phase = ProcessingProgress.Phase.FRAMES,
+                            refineEnabled = refineOn,
                         )
                     )
                 }
+
+                onProgress(
+                    ProcessingProgress(info.durationMs, info.durationMs, frames, records.size,
+                        SystemClock.elapsedRealtime() - start, ProcessingProgress.Phase.GROUPING, refineEnabled = refineOn)
+                )
+                coroutineContext.ensureActive()
+                val clusterStart = SystemClock.elapsedRealtime()
+                val b = PersonOps.buildPersons(records, settings)
+                clusterMs = SystemClock.elapsedRealtime() - clusterStart
+                built = b
+
+                if (refineOn && b.persons.isNotEmpty()) {
+                    refine = refineShots(b.persons, records, settings, info, detector, embedder, facesDir) { done, total ->
+                        onProgress(
+                            ProcessingProgress(info.durationMs, info.durationMs, frames, records.size,
+                                SystemClock.elapsedRealtime() - start, ProcessingProgress.Phase.REFINING,
+                                refineDone = done, refineTotal = total, refineEnabled = true)
+                        )
+                    }
+                }
             }
         }
+        val result = built!!
+        val persons = if (refine.persons.isNotEmpty()) refine.persons else result.persons
 
         onProgress(
             ProcessingProgress(info.durationMs, info.durationMs, frames, records.size,
-                SystemClock.elapsedRealtime() - start, ProcessingProgress.Phase.GROUPING)
-        )
-        coroutineContext.ensureActive()
-        val clusterStart = SystemClock.elapsedRealtime()
-        val built = PersonOps.buildPersons(records, settings)
-        val clusterMs = SystemClock.elapsedRealtime() - clusterStart
-
-        onProgress(
-            ProcessingProgress(info.durationMs, info.durationMs, frames, records.size,
-                SystemClock.elapsedRealtime() - start, ProcessingProgress.Phase.SAVING)
+                SystemClock.elapsedRealtime() - start, ProcessingProgress.Phase.SAVING, refineEnabled = refineOn)
         )
         if (settings.keepTuningData) {
             repository.saveFaceRecords(session.id, records)
         } else {
             // Zostawiamy tylko wycinki, które są pokazywane jako ujęcia osób.
-            records.filter { it.id !in built.usedFaceIds }.forEach { File(sessionDir, it.cropPath).delete() }
+            records.filter { it.id !in result.usedFaceIds }.forEach { File(sessionDir, it.cropPath).delete() }
         }
 
         val stats = ProcessingStats(
@@ -193,15 +239,135 @@ class VideoProcessor(
             clusterMs = clusterMs,
             framesFailed = framesFailed,
             framesDuplicate = framesDuplicate,
+            refineMs = refine.ms,
+            refineShots = refine.shots,
+            refineImproved = refine.improved,
             device = "${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})",
         )
         return session.copy(
             video = info,
             status = SessionStatus.READY,
-            persons = built.persons,
-            rejectedGroups = if (settings.keepTuningData) built.rejected else emptyList(),
+            persons = persons,
+            rejectedGroups = if (settings.keepTuningData) result.rejected else emptyList(),
             stats = stats,
         )
+    }
+
+    private data class RefineResult(val persons: List<Person>, val shots: Int, val improved: Int, val ms: Long)
+
+    /**
+     * Doszukiwanie ostrzejszych ujęć. Próbkujemy co 0,5 s, więc wybrane ujęcie bywa poruszone albo
+     * z „grzebieniami” przeplotu, a klatka obok jest ostra. Dla każdego ujęcia (najlepsze + alternatywy)
+     * dekodujemy KAŻDĄ klatkę w oknie ±refineWindowMs, znajdujemy tę samą twarz (to samo miejsce
+     * kadru + podobny embedding) i bierzemy klatkę z najwyższą oceną (w której ostrość waży najwięcej).
+     * Osobny MediaMetadataRetriever, bo dekoder sekwencyjny nie umie się cofać.
+     */
+    private suspend fun refineShots(
+        persons: List<Person>,
+        records: List<FaceRecord>,
+        settings: ProcessingSettings,
+        info: VideoInfo,
+        detector: FaceDetectorEngine,
+        embedder: FaceEmbedder,
+        facesDir: File,
+        onStep: (done: Int, total: Int) -> Unit,
+    ): RefineResult {
+        val t0 = SystemClock.elapsedRealtime()
+        val source = runCatching {
+            RetrieverFrameSource(context, Uri.parse(info.uri), exact = true, maxWidth = settings.maxFrameWidth)
+        }.getOrElse {
+            Log.w(TAG, "Doszukiwanie ujęć pominięte: nie można otworzyć wideo", it)
+            return RefineResult(emptyList(), 0, 0, 0)
+        }
+        val byId = records.associateBy { it.id }
+        val frameMs = if (info.frameRate > 0f) 1000f / info.frameRate else 40f
+        val steps = (settings.refineWindowMs / frameMs).roundToInt().coerceIn(1, MAX_REFINE_STEPS)
+        val total = persons.sumOf { 1 + it.alternateShots.size }
+        var done = 0
+        var improved = 0
+        onStep(0, total)
+
+        source.use { src ->
+            val out = persons.map { p ->
+                val shots = (listOf(p.bestShot) + p.alternateShots).map { shot ->
+                    coroutineContext.ensureActive()
+                    val better = runCatching { refineOne(shot, byId[shot.faceId], steps, frameMs, info, settings, src, detector, embedder, facesDir) }
+                        .onFailure { Log.w(TAG, "Doszukiwanie ujęcia ${shot.faceId} nie powiodło się", it) }
+                        .getOrNull()
+                    done++
+                    onStep(done, total)
+                    if (better != null) improved++
+                    better ?: shot
+                }
+                // po doszukaniu alternatywa mogła przegonić dotychczasowe najlepsze ujęcie
+                val best = shots.maxBy { it.quality }
+                p.copy(bestShot = best, alternateShots = shots.filter { it !== best })
+            }
+            return RefineResult(out, total, improved, SystemClock.elapsedRealtime() - t0)
+        }
+    }
+
+    /** Zwraca lepsze ujęcie albo null, gdy w oknie nie ma lepszej klatki tej samej twarzy. */
+    private fun refineOne(
+        shot: FaceShot,
+        record: FaceRecord?,
+        steps: Int,
+        frameMs: Float,
+        info: VideoInfo,
+        settings: ProcessingSettings,
+        source: FrameSource,
+        detector: FaceDetectorEngine,
+        embedder: FaceEmbedder,
+        facesDir: File,
+    ): FaceShot? {
+        record ?: return null
+        val refBox = Rect(record.left, record.top, record.right, record.bottom)
+        var bestQ = shot.quality
+        var bestT = -1L
+        val outName = "f_${shot.faceId}_r.jpg"
+        for (k in -steps..steps) {
+            if (k == 0) continue
+            val t = record.timestampMs + (k * frameMs).roundToInt()
+            if (t < 0 || t >= info.durationMs) continue
+            val frame = source.frameAt(t) ?: continue
+            try {
+                val match = detector.detect(frame)
+                    .filter { it.box.height() >= settings.minFaceHeightPx && visibleFraction(it.box, frame.width, frame.height) >= 0.92f }
+                    .map { it to iou(it.box, refBox) }
+                    .filter { it.second >= REFINE_MIN_IOU }
+                    .maxByOrNull { it.second }?.first ?: continue
+                val pairs = FaceAlignment.pairs(match.leftEye, match.rightEye, match.nose, match.mouthLeft, match.mouthRight) ?: continue
+                val emb = embedder.embed(frame, FaceAlignment.similarityTransform(pairs.first, pairs.second))
+                // ta sama osoba? (w oknie ±160 ms bywa cięcie montażowe)
+                if (VectorMath.dot(emb, VectorMath.normalize(record.embedding)) < REFINE_MIN_SIMILARITY) continue
+                val q = scorer.score(
+                    FaceObservation(
+                        face = grayRegion(frame, match.box),
+                        faceHeightPx = match.box.height().toFloat(),
+                        yawDeg = match.yaw, pitchDeg = match.pitch, rollDeg = match.roll,
+                        leftEyeOpen = match.leftEyeOpen, rightEyeOpen = match.rightEyeOpen,
+                        smiling = match.smiling,
+                    )
+                )
+                if (q.total > bestQ + MIN_IMPROVEMENT) {
+                    saveCrop(frame, match.box, File(facesDir, outName), deinterlace = q.combing > DEINTERLACE_ABOVE)
+                    bestQ = q.total
+                    bestT = t
+                }
+            } finally {
+                frame.recycle()
+            }
+        }
+        if (bestT < 0) return null
+        return FaceShot(shot.faceId, "$FACES_DIR/$outName", bestT, bestQ)
+    }
+
+    private fun iou(a: Rect, b: Rect): Float {
+        val inter = Rect()
+        if (!inter.setIntersect(a, b)) return 0f
+        val i = inter.width().toFloat() * inter.height()
+        val u = a.width().toFloat() * a.height() + b.width().toFloat() * b.height() - i
+        return if (u <= 0f) 0f else i / u
     }
 
     private fun visibleFraction(box: Rect, w: Int, h: Int): Float {
@@ -223,7 +389,7 @@ class VideoProcessor(
     }
 
     /** Wycinek z marginesem ~40% wokół twarzy, kwadratowy, maks. [CROP_MAX_PX] px. */
-    private fun saveCrop(frame: Bitmap, box: Rect, out: File) {
+    private fun saveCrop(frame: Bitmap, box: Rect, out: File, deinterlace: Boolean = false) {
         val side = (max(box.width(), box.height()) * (1f + 2 * CROP_MARGIN)).roundToInt()
         val cx = box.centerX()
         // Lekko w dół: pod twarzą zostaje kawałek szyi/ubrania, jak na zdjęciu portretowym.
@@ -232,7 +398,15 @@ class VideoProcessor(
         if (!r.intersect(0, 0, frame.width, frame.height) || r.isEmpty) return
         // Uwaga: gdy wycinek obejmuje całą klatkę (zbliżenie), createBitmap zwraca TĘ SAMĄ bitmapę —
         // nie wolno jej wtedy zwolnić, bo klatka jest jeszcze potrzebna dla kolejnych twarzy.
-        var crop = Bitmap.createBitmap(frame, r.left, r.top, r.width(), r.height())
+        var crop = if (deinterlace) {
+            // jedno pole liczone względem wierszy KLATKI (parzystość r.top), drugie interpolowane
+            val px = IntArray(r.width() * r.height())
+            frame.getPixels(px, 0, r.width(), r.left, r.top, r.width(), r.height())
+            val clean = ImageOps.bobDeinterlace(px, r.width(), r.height(), keepEven = r.top % 2 == 0)
+            Bitmap.createBitmap(clean, r.width(), r.height(), Bitmap.Config.ARGB_8888)
+        } else {
+            Bitmap.createBitmap(frame, r.left, r.top, r.width(), r.height())
+        }
         val longest = max(crop.width, crop.height)
         if (longest > CROP_MAX_PX) {
             val s = CROP_MAX_PX.toFloat() / longest
@@ -257,5 +431,13 @@ class VideoProcessor(
         const val FACES_DIR = "faces"
         const val CROP_MARGIN = 0.4f
         const val CROP_MAX_PX = 400
+        private const val TAG = "VideoProcessor"
+        /** Od jakiej oceny przeplotu (0–1) zapisujemy wycinek z jednego pola. */
+        const val DEINTERLACE_ABOVE = 0.15f
+        private const val MAX_REFINE_STEPS = 12
+        private const val REFINE_MIN_IOU = 0.3f
+        private const val REFINE_MIN_SIMILARITY = 0.35f
+        /** Minimalna poprawa oceny, żeby podmienić ujęcie (szum oceny). */
+        private const val MIN_IMPROVEMENT = 0.01f
     }
 }
