@@ -54,4 +54,35 @@ class ImageMetricsTest {
         assertEquals(50, d.width)
         assertTrue(d.pixels.all { it == 77 })
     }
+
+    private fun upscale2x(img: GrayImage) = GrayImage(img.width * 2, img.height * 2, IntArray(img.width * img.height * 4) { i ->
+        val x = (i % (img.width * 2)) / 2
+        val y = (i / (img.width * 2)) / 2
+        img[x, y]
+    })
+
+    private fun noisy(img: GrayImage, sigma: Double, seed: Int = 3): GrayImage {
+        val rnd = java.util.Random(seed.toLong())
+        return GrayImage(img.width, img.height, IntArray(img.pixels.size) { (img.pixels[it] + rnd.nextGaussian() * sigma).toInt().coerceIn(0, 255) })
+    }
+
+    @Test
+    fun `ostrosc nie zalezy od wielkosci twarzy`() {
+        // ta sama twarz 2× większa (np. zbliżenie) ma mieć podobną ostrość, nie 4× mniejszą/większą
+        val face = TestImages.blur(TestImages.detailed(64, 64), 1)
+        val a = ImageMetrics.normalizedSharpness(face)
+        val b = ImageMetrics.normalizedSharpness(upscale2x(face))
+        assertTrue("$a vs $b", b in 0.5 * a..1.5 * a)
+    }
+
+    @Test
+    fun `szum VHS nie udaje ostrosci`() {
+        // rozmyta twarz z mocnym szumem nie może wygrać z ostrą twarzą z lekkim szumem
+        val face = TestImages.detailed(64, 64)
+        val sharpClean = noisy(face, 3.0)
+        val blurredNoisy = noisy(TestImages.blur(face, 2), 12.0)
+        assertTrue(ImageMetrics.normalizedSharpness(sharpClean) > ImageMetrics.normalizedSharpness(blurredNoisy))
+        // dla porównania: zwykły Laplasjan daje się oszukać szumowi
+        assertTrue(ImageMetrics.laplacianVariance(blurredNoisy) > ImageMetrics.laplacianVariance(TestImages.blur(face, 2)) * 3)
+    }
 }

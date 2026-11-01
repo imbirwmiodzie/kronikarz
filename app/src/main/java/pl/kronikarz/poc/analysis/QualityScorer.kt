@@ -46,8 +46,8 @@ data class QualityWeights(
     val combingPenalty: Float = 0.5f,
     /** Wysokość twarzy (px), od której rozmiar nie daje już punktów. */
     val fullSizePx: Float = 160f,
-    /** Stała nasycenia ostrości: s / (s + K). */
-    val sharpnessK: Float = 120f,
+    /** Stała nasycenia ostrości: s / (s + K). K ≈ mediana dla twarzy z VHS (twarz 64 px, σ 0.7). */
+    val sharpnessK: Float = 100f,
     /** Kąt (stopnie), przy którym „na wprost” spada do zera. */
     val maxAngleDeg: Float = 45f,
 )
@@ -63,7 +63,7 @@ class QualityScorer(private val w: QualityWeights = QualityWeights()) {
 
         val size = clamp01(o.faceHeightPx / w.fullSizePx)
 
-        val lap = ImageMetrics.fieldSharpness(norm)
+        val lap = ImageMetrics.normalizedSharpness(o.face)
         val sharpness = (lap / (lap + w.sharpnessK)).toFloat()
 
         val angle = sqrt(o.yawDeg * o.yawDeg + (1.2f * o.pitchDeg) * (1.2f * o.pitchDeg) + 0.3f * o.rollDeg * o.rollDeg)

@@ -11,7 +11,7 @@ Proof of concept aplikacji na Androida, która:
 
 Wszystko dzieje się na telefonie. Aplikacja **nie ma uprawnienia INTERNET** i prosi tylko o mikrofon.
 
-> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (lokalnie i w CI), 47 testów jednostkowych
+> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (lokalnie i w CI), 49 testów jednostkowych
 > przechodzi, Android Lint: 0 błędów. Algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu
 > testowego (sekcja [Pomiary](#pomiary)). **Aplikację przeszedłem od początku do końca na emulatorze**
 > (Android 10, x86_64, bez akceleracji sprzętowej): wybór pliku → postęp → anulowanie (sesja usunięta) →
@@ -226,7 +226,7 @@ flowchart TD
 
    | Składnik | Waga | Jak liczony |
    |---|---|---|
-   | ostrość | 0.33 | wariancja Laplasjanu na **jednym polu** (co druga linia), na wycinku znormalizowanym do 128 px; s/(s+120) |
+   | ostrość | 0.33 | wariancja Laplasjanu po: wyborze **jednego pola**, przeskalowaniu twarzy do **stałych 64 px** i lekkim rozmyciu (σ 0.7) przeciw szumowi; s/(s+100). Skuteczność: niżej |
    | wielkość twarzy | 0.16 | wysokość / 160 px |
    | twarz na wprost | 0.18 | 1 − √(yaw² + (1.2·pitch)² + 0.3·roll²) / 45° |
    | otwarte oczy | 0.13 | 0.6·min(L, P) + 0.4·średnia (mrugnięcie jednym okiem też karane) |
@@ -265,6 +265,25 @@ flowchart TD
 dotychczasowe wyświetlanie. Po prawej: jedno pole + wyostrzenie + powiększenie dwusześcienne
 (ten sam kod Kotlina co w aplikacji). Szczegółów nie przybywa (to wciąż VHS), ale znikają grzebienie
 i schodki.*
+
+#### Jak skuteczna jest miara ostrości?
+
+Sprawdziłem ją na 627 twarzach z symulacji VHS filmu testowego. Wzorzec to ostrość **tej samej**
+twarzy w czystej wersji filmu (`tools/eval_sharpness.py`).
+
+| Miara | Pary ujęć tej samej osoby: zgodna kolejność | 3 sąsiednie klatki: wybrana najostrzejsza | …: wybrana nie najgorsza |
+|---|---|---|---|
+| losowy wybór | 50% | ~33% | ~67% |
+| pierwsza wersja (pole + Laplasjan) | **38%** — gorzej niż losowo | 52% | 79% |
+| **obecna** (pole + stałe 64 px + rozmycie σ 0.7) | **88%** | **60%** | **87%** |
+
+Pierwsza wersja nagradzała szum taśmy i małe twarze (na małej twarzy szum dominuje), zamiast ostrości.
+Stała skala i lekkie rozmycie przed Laplasjanem to naprawiają (testy `ostrosc nie zalezy od wielkosci
+twarzy` i `szum VHS nie udaje ostrosci`). Ograniczenia: miara dalej reaguje na kontrast i teksturę
+(broda, okulary, wzorzysty kołnierz), więc działa dobrze przy porównywaniu ujęć **tej samej osoby**
+(do tego służy), gorzej między różnymi scenami. Szum VHS w teście był symulowany. Na prawdziwych
+kasetach warto to sprawdzić na kilku osobach w podglądzie grup (debug), gdzie wycinki są posortowane
+wg oceny.
 
 > **Dlaczego na telewizorze wygląda lepiej niż stopklatka?** VHS ma ok. 250–330 linii rozdzielczości
 > poziomej. Twarz w domowym nagraniu to często 60–120 pikseli. W ruchu oko uśrednia kolejne klatki,
@@ -412,11 +431,11 @@ wymienić z powodów licencyjnych.
 
 ## Testy
 
-### Jednostkowe (JVM) — 47 testów, `./gradlew testDebugUnitTest`
+### Jednostkowe (JVM) — 49 testów, `./gradlew testDebugUnitTest`
 
 | Plik | Co sprawdza |
 |---|---|
-| `ImageMetricsTest` | Laplasjan spada przy rozmyciu; wykrywanie przeplotu; ostrość z jednego pola nie jest zawyżana przez grzebienie; ekspozycja; skalowanie |
+| `ImageMetricsTest` | ostrość niezależna od wielkości twarzy i odporna na szum; Laplasjan spada przy rozmyciu; wykrywanie przeplotu; ostrość z jednego pola nie jest zawyżana przez grzebienie; ekspozycja; skalowanie |
 | `ImageOpsTest` | usuwanie przeplotu (grzebienie znikają, wybrane pole bez zmian), skalowanie dwusześcienne (rozmiar, kolor, gradient bez „dzwonienia”), wyostrzanie |
 | `QualityScorerTest` | ostra > rozmyta; na wprost > profil / głowa w dół; otwarte oczy > mrugnięcie (też jednym okiem); duża > mała; poprawna > nie-/prześwietlona; uśmiech to tylko mały bonus; kara za przeplot |
 | `FaceAlignmentTest` | odtworzenie znanego przekształcenia; kolejność lewe/prawe oko bez znaczenia; brak punktów |
