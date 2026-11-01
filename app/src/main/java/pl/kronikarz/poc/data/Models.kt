@@ -55,6 +55,10 @@ data class ProcessingStats(
     val otherMs: Long,
     val clusterMs: Long,
     val device: String,
+    /** Próbki, których dekoder nie zwrócił (null) — diagnostyka dekodera. */
+    val framesFailed: Int = 0,
+    /** Próbki pominięte, bo dekoder zwrócił tę samą klatkę co poprzednio. */
+    val framesDuplicate: Int = 0,
 ) {
     /** Czas przetwarzania jednej minuty wideo (główna metryka wydajności). */
     val msPerVideoMinute: Long get() = if (videoDurationMs <= 0) 0 else wallClockMs * 60_000 / videoDurationMs

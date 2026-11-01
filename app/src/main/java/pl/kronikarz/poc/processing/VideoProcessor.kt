@@ -69,6 +69,8 @@ class VideoProcessor(
         var noLandmarks = 0
         var detected = 0
         var frames = 0
+        var framesFailed = 0
+        var framesDuplicate = 0
         val records = mutableListOf<FaceRecord>()
 
         // Względny minimalny rozmiar dla ML Kit (szerokość głowy / szerokość obrazu) — trochę
@@ -138,8 +140,12 @@ class VideoProcessor(
                                 )
                                 otherMs += SystemClock.elapsedRealtime() - tick
                             }
+                        } else {
+                            framesDuplicate++
                         }
                         frame.recycle()
+                    } else {
+                        framesFailed++
                     }
                     t += settings.sampleIntervalMs
                     onProgress(
@@ -185,6 +191,8 @@ class VideoProcessor(
             rejectedNoLandmarks = noLandmarks,
             decodeMs = decodeMs, detectMs = detectMs, embedMs = embedMs, otherMs = otherMs,
             clusterMs = clusterMs,
+            framesFailed = framesFailed,
+            framesDuplicate = framesDuplicate,
             device = "${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})",
         )
         return session.copy(

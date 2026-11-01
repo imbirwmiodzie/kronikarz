@@ -209,7 +209,7 @@ private fun StatsBlock(s: Session) {
         appendLine("Urządzenie: ${st.device}")
         appendLine("Czas: ${formatDuration(st.wallClockMs)}  →  ${"%.1f".format(st.msPerVideoMinute / 1000f)} s na minutę wideo")
         appendLine("  dekodowanie ${st.decodeMs / 1000}s, detekcja ${st.detectMs / 1000}s, embedding ${st.embedMs / 1000}s, reszta ${st.otherMs / 1000}s, grupowanie ${st.clusterMs}ms")
-        appendLine("Klatki: ${st.framesSampled}, twarze wykryte: ${st.facesDetected}, przyjęte: ${st.facesAccepted}")
+        appendLine("Klatki: ${st.framesSampled} (nieudane ${st.framesFailed}, powtórzone ${st.framesDuplicate}), twarze wykryte: ${st.facesDetected}, przyjęte: ${st.facesAccepted}")
         appendLine("Odrzucone: za małe ${st.rejectedTooSmall}, ucięte ${st.rejectedAtEdge}, bez punktów ${st.rejectedNoLandmarks}")
         appendLine("Dekoder: ${if (s.settings.sequentialDecoder) "MediaCodec (sekwencyjny)" else "MediaMetadataRetriever"}${if (s.settings.exactFrames) "" else ", klatki kluczowe"}")
         appendLine("Ustawienia sesji: co ${s.settings.sampleIntervalMs} ms, min ${s.settings.minFaceHeightPx} px, próg ${s.settings.similarityThreshold}, min wyst. ${s.settings.minOccurrences}")

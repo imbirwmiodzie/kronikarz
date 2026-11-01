@@ -11,12 +11,18 @@ Proof of concept aplikacji na Androida, która:
 
 Wszystko dzieje się na telefonie. Aplikacja **nie ma uprawnienia INTERNET** i prosi tylko o mikrofon.
 
-> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (`assembleDebug`), 43 testy jednostkowe
-> przechodzą, a algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu testowego (sekcja
-> [Pomiary](#pomiary)). **Aplikacji nie uruchamiałem na telefonie ani emulatorze** — środowisko, w którym
-> powstała, nie ma urządzenia ani akceleracji emulatora. Czas przetwarzania na urządzeniu jest więc
-> do zmierzenia (aplikacja mierzy go sama, patrz [Jak zmierzyć czas](#jak-zmierzyć-czas-na-telefonie)),
-> a interfejs wymaga pierwszego przejścia ręcznego.
+> **Stan weryfikacji (przeczytaj najpierw).** Kod buduje się (lokalnie i w CI), 43 testy jednostkowe
+> przechodzą, Android Lint: 0 błędów. Algorytm grupowania sprawdziłem na prawdziwych embeddingach z filmu
+> testowego (sekcja [Pomiary](#pomiary)). **Aplikację przeszedłem od początku do końca na emulatorze**
+> (Android 10, x86_64, bez akceleracji sprzętowej): wybór pliku → postęp → anulowanie (sesja usunięta) →
+> ponowne przetworzenie 10-sekundowego fragmentu filmu → 2 osoby rozdzielone poprawnie → przegląd
+> → zgoda na mikrofon → nagranie → przejście do pytania 2 → lista nagrań → „To ta sama osoba co…” →
+> podsumowanie → eksport ZIP przez systemowe udostępnianie (zawartość zgodna z formatem). Ten test
+> znalazł i pozwolił naprawić 3 błędy interfejsu. **Na fizycznym telefonie aplikacja jeszcze nie
+> działała**, a czas z emulatora nie jest miarodajny (emulacja programowa, ok. 100 s na klatkę),
+> więc czas przetwarzania trzeba zmierzyć na telefonie (aplikacja mierzy go sama, patrz
+> [Jak zmierzyć czas](#jak-zmierzyć-czas-na-telefonie)). Nie sprawdziłem na emulatorze: ekranu debug,
+> odsłuchu (emulator bez dźwięku) i dekodera MediaCodec.
 
 ---
 
@@ -449,7 +455,9 @@ wyrównanie. Wnioski o progach powinny się przenosić. Liczby z telefonu mogą 
 #### Jak zmierzyć czas na telefonie
 
 Każde przetworzenie zapisuje statystykę w sesji. Odczyt: ekran debug → wybierz sesję → „Czas: … →
-X s na minutę wideo” (z rozbiciem). Te same dane trafiają do eksportu (`session.stats`), w tym model
+X s na minutę wideo” (z rozbiciem). Pokazuje też, ile próbek dekoder nie zwrócił albo zwrócił
+powtórzone. Na emulatorze 7 z 20 próbek 10-sekundowego fragmentu nie trafiło do analizy, więc jeśli
+na telefonie ta liczba też będzie wysoka, warto przełączyć dekoder w debug i porównać. Te same dane trafiają do eksportu (`session.stats`), w tym model
 telefonu. Proszę o wpisanie wyników do tabeli wyżej.
 
 Wstępne oczekiwania (szacunek, nie pomiar): ML Kit w trybie dokładnym kosztuje dziesiątki ms na klatkę,
