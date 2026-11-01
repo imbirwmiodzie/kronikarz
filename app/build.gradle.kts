@@ -28,12 +28,25 @@ android {
         }
     }
 
+    signingConfigs {
+        // Stały klucz POC (w repo, hasło jawne — NIE do sklepu). Dzięki niemu APK z CI i z każdego
+        // komputera ma ten sam podpis i da się go instalować na poprzednią wersję bez odinstalowania.
+        create("poc") {
+            storeFile = file("poc-signing.keystore")
+            storePassword = "android"
+            keyAlias = "kronikarz-poc"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("poc")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // POC: podpis kluczem debug, żeby wersję release dało się od razu zainstalować przez adb
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("poc")
         }
     }
 

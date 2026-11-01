@@ -38,6 +38,26 @@ Wszystko dzieje się na telefonie. Aplikacja **nie ma uprawnienia INTERNET** i p
 
 ## Budowanie i instalacja
 
+### Gotowy APK z CI (najprościej)
+
+Każdy push uruchamia GitHub Actions (`.github/workflows/android.yml`): testy jednostkowe + budowa APK
+**release dla arm64-v8a** (64-bitowy ARM — praktycznie każdy telefon z ostatnich lat), ok. 78 MB.
+APK do pobrania: zakładka **Actions** → ostatni przebieg → sekcja **Artifacts** →
+`kronikarz-poc-arm64-v8a` (ZIP z plikiem `kronikarz-poc-arm64-v8a-<commit>.apk`, ważny 30 dni).
+
+```bash
+adb install -r kronikarz-poc-arm64-v8a-*.apk
+```
+
+Albo skopiuj APK na telefon i otwórz go (trzeba zezwolić na instalację z nieznanych źródeł).
+
+Wszystkie buildy (CI i lokalne, debug i release) są podpisane **tym samym kluczem POC**
+(`app/poc-signing.keystore`, hasło `android`, jawne celowo). Dzięki temu nowy APK instaluje się na
+poprzedni bez odinstalowania i bez utraty sesji. To klucz tylko do testów — do sklepu potrzebny
+będzie prywatny klucz trzymany poza repozytorium.
+
+### Budowanie lokalne
+
 Wymagania: JDK 17+, Android SDK z platformą 35 (Android Studio albo same command-line tools).
 Gradle pobierze się sam (wrapper).
 
