@@ -1,0 +1,18 @@
+.gradle/
+build/
+/local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+# Model pobierany przy budowaniu (patrz README, sekcja "Model rozpoznawania twarzy")
+/app/src/main/assets/models/*.onnx
+# Lokalne materiały testowe / narzędzia
+/tools/.venv/
+/tools/out/
+*.mov
+*.mp4
+*.mkv
+__pycache__/

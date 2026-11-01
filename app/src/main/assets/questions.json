@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "questions": [
+    { "id": "who", "text": "Kim jest ta osoba? Jak się nazywa?" },
+    { "id": "relation", "text": "Kim jest dla Ciebie lub dla rodziny?" },
+    { "id": "age_year", "text": "Ile mogła mieć wtedy lat? W którym roku mogło to być?" },
+    { "id": "place", "text": "Gdzie to nagranie mogło powstać?" },
+    { "id": "occasion", "text": "Co się wtedy działo: jaka to okazja?" },
+    { "id": "memory", "text": "Jakie masz wspomnienie związane z tą osobą?" }
+  ],
+  "closing": { "id": "more", "text": "Czy chcesz dodać coś jeszcze o tej osobie?" }
+}

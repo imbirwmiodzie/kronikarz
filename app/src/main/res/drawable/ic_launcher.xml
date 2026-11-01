@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Prosta ikona: odbitka zdjęcia z białą ramką na ciepłym tle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFB5643C" android:pathData="M0,0h108v108h-108z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M26,22h56v64h-56z" />
+    <path android:fillColor="#FFE9D8C0" android:pathData="M31,27h46v46h-46z" />
+    <path android:fillColor="#FF7A4A2E" android:pathData="M54,36a8,8 0,1 1,-0.01 0z" />
+    <path android:fillColor="#FF7A4A2E" android:pathData="M38,73c0,-12 7,-19 16,-19s16,7 16,19z" />
+</vector>
