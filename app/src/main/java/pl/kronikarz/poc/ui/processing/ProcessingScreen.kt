@@ -102,7 +102,10 @@ private fun Running(s: ProcessingState.Running, onCancel: () -> Unit) {
     Text(s.videoName, style = MaterialTheme.typography.bodyLarge, color = AlbumColors.InkSoft)
     Spacer(Modifier.height(32.dp))
     if (p == null) {
-        LinearProgressIndicator(Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(8.dp)))
+        LinearProgressIndicator(
+            Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(8.dp)),
+            trackColor = AlbumColors.PaperDark,
+        )
         Spacer(Modifier.height(16.dp))
         Text("Otwieram nagranie…", style = MaterialTheme.typography.bodyLarge)
     } else {

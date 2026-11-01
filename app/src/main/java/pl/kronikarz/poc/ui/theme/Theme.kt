@@ -40,7 +40,9 @@ private val colors = lightColorScheme(
     error = AlbumColors.Recording,
 )
 
-private val base = TextStyle(fontFamily = FontFamily.SansSerif, color = AlbumColors.Ink)
+// Bez koloru w stylu tekstu: kolor dziedziczy się z kontekstu (np. biały na przycisku głównym,
+// Ink na tle przez colorScheme.onBackground/onSurface).
+private val base = TextStyle(fontFamily = FontFamily.SansSerif)
 
 /** Duże czcionki — interfejs dla starszych osób. */
 private val typography = Typography(

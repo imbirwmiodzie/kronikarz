@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -19,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import pl.kronikarz.poc.KronikarzApp
+import pl.kronikarz.poc.processing.ProcessingState
 import pl.kronikarz.poc.ui.debug.DebugScreen
 import pl.kronikarz.poc.ui.home.HomeScreen
 import pl.kronikarz.poc.ui.processing.ProcessingScreen
@@ -40,23 +42,28 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = AlbumColors.Paper) {
                     val nav = rememberNavController()
                     val shared by sharedVideo
-                    LaunchedEffect(shared) {
-                        val uri = shared ?: return@LaunchedEffect
-                        sharedVideo.value = null
-                        app.processing.start(uri, app.settings.settings.value)
-                        nav.navigate("processing") { popUpTo("home") }
-                    }
                     NavHost(nav, startDestination = "home") {
                         composable("home") {
+                            // Udostępnione wideo obsługujemy dopiero, gdy ekran główny jest na miejscu
+                            // (wcześniej nawigacja do „processing” mogła zostać nadpisana startem grafu).
+                            LaunchedEffect(shared) {
+                                val uri = shared ?: return@LaunchedEffect
+                                sharedVideo.value = null
+                                app.processing.start(uri, app.settings.settings.value)
+                            }
+                            // Nawigacja sterowana stanem: gdy trwa przetwarzanie, ekran główny sam
+                            // przechodzi do postępu. (Wywołanie navigate() z wyniku pickera, gdy aktywność
+                            // dopiero wraca na pierwszy plan, potrafiło przepaść — sprawdzone na emulatorze.)
+                            val running = app.processing.state.collectAsState().value is ProcessingState.Running
+                            LaunchedEffect(running) {
+                                if (running) nav.navigate("processing") { launchSingleTop = true }
+                            }
                             HomeScreen(
                                 app,
-                                onVideoPicked = { uri ->
-                                    app.processing.start(uri, app.settings.settings.value)
-                                    nav.navigate("processing")
-                                },
+                                onVideoPicked = { uri -> app.processing.start(uri, app.settings.settings.value) },
                                 onOpenSession = { s -> nav.navigate("review/${s.id}") },
                                 onOpenDebug = { nav.navigate("debug") },
-                                onShowProcessing = { nav.navigate("processing") },
+                                onShowProcessing = { nav.navigate("processing") { launchSingleTop = true } },
                             )
                         }
                         composable("processing") {

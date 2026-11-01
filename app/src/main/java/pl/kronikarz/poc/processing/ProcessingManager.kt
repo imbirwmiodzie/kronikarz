@@ -50,7 +50,12 @@ class ProcessingManager(
         _state.value = ProcessingState.Running(sessionId, name, null)
         job = scope.launch {
             try {
-                val source = openSource(uri, settings)
+                val source = try {
+                    openSource(uri, settings)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Nie można otworzyć $uri", e)
+                    throw UserFacingException("Nie udało się otworzyć tego pliku wideo. Spróbuj wybrać go jeszcze raz albo przez „Wybierz z plików”.")
+                }
                 source.use {
                     if (it.info.durationMs <= 0) error("Nie udało się odczytać długości nagrania")
                     val session = Session(
@@ -73,7 +78,9 @@ class ProcessingManager(
             } catch (e: Throwable) {
                 Log.e(TAG, "Przetwarzanie nie powiodło się", e)
                 withContext(NonCancellable) { repository.delete(sessionId) }
-                _state.value = ProcessingState.Failed(e.message ?: e.javaClass.simpleName)
+                _state.value = ProcessingState.Failed(
+                    (e as? UserFacingException)?.message ?: "Wystąpił błąd: ${e.message ?: e.javaClass.simpleName}"
+                )
             }
         }
     }
@@ -128,3 +135,6 @@ class ProcessingManager(
         const val TAG = "ProcessingManager"
     }
 }
+
+/** Błąd z komunikatem przeznaczonym dla użytkownika (po polsku, bez szczegółów technicznych). */
+class UserFacingException(message: String) : Exception(message)
